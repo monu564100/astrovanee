@@ -12,6 +12,10 @@ import tokenRouter from './routes/token.js';
 import usersRouter from './routes/users.js';
 import vendorRouter from './routes/vendors.js'; // Added vendorRouter import
 import { initCallExpiryWatcher } from './services/callScheduler.js';
+import { initializeFirebase } from './services/firebase.js';
+
+// Initialize Firebase Admin SDK
+initializeFirebase();
 
 export const app = express();
 app.use(helmet());

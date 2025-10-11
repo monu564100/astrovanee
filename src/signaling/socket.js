@@ -19,33 +19,63 @@ export function initSignaling(httpServer) {
       const room = `${role}:${id}`;
       socket.join(room);
       logger.info({ 
-        msg: '✅ identity registered', 
+        msg: '✅ ========== IDENTITY REGISTERED ==========', 
         role, 
         id, 
         room,
         socketId: socket.id 
       });
+      logger.info({ msg: `✅ Socket ${socket.id} can now receive events in room: ${room}` });
     });
 
     // Vendor initiates call invite
     socket.on('call_invite', async ({ consultationId, vendorId, userId, channelName }) => {
       try {
-        if (!consultationId || !vendorId || !userId) return;
+        logger.info({ msg: '📞 ========== BACKEND: call_invite received ==========', consultationId, vendorId, userId, channelName });
+        
+        if (!consultationId || !vendorId || !userId) {
+          logger.error({ msg: '❌ Missing required fields', consultationId, vendorId, userId });
+          return;
+        }
+        
+        // Check which sockets are in the user room
+        const userRoom = `user:${userId}`;
+        const socketsInRoom = await io.in(userRoom).fetchSockets();
+        logger.info({ 
+          msg: '🔍 Checking user room', 
+          room: userRoom, 
+          socketsCount: socketsInRoom.length,
+          socketIds: socketsInRoom.map(s => s.id)
+        });
+        
+        if (socketsInRoom.length === 0) {
+          logger.warn({ msg: '⚠️ No sockets in user room - user may not be connected', room: userRoom });
+        }
+        
         // Persist or update consultation status to ringing
         await pool.execute("UPDATE consultation SET consultationstatus='ringing' WHERE id=?", [consultationId]);
-        logger.info({ msg: 'call invite', consultationId, vendorId, userId });
-        io.to(`user:${userId}`).emit('incoming_call', { consultationId, vendorId, channelName });
+        logger.info({ msg: '✅ Database updated to ringing', consultationId });
+        
+        // CRITICAL: Only emit to USER room, NOT to vendor room (vendor is the caller)
+        const payload = { consultationId, vendorId, channelName };
+        logger.info({ msg: '📤 Emitting incoming_call to USER room ONLY (not vendor)', room: userRoom, payload });
+        io.to(userRoom).emit('incoming_call', payload);
+        logger.info({ msg: '✅ incoming_call emitted to user only', room: userRoom });
+        
         // Auto-cancel after 30s if not accepted
         setTimeout(async () => {
           const [rows] = await pool.query('SELECT consultationstatus FROM consultation WHERE id=?', [consultationId]);
             if (rows[0] && rows[0].consultationstatus === 'ringing') {
+              logger.info({ msg: '⏰ Call timeout - no answer after 30s', consultationId });
               await pool.execute("UPDATE consultation SET consultationstatus='missed' WHERE id=?", [consultationId]);
               io.to(`vendor:${vendorId}`).emit('call_missed', { consultationId });
               io.to(`user:${userId}`).emit('call_missed', { consultationId });
             }
         }, 30000).unref();
+        
+        logger.info({ msg: '📞 ========== BACKEND: call_invite complete ==========\n' });
       } catch (e) {
-        logger.error(e);
+        logger.error({ msg: '❌ call_invite error', error: e.message, stack: e.stack });
       }
     });
 

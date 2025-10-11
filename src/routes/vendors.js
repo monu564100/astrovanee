@@ -7,7 +7,7 @@ const router = Router();
 router.get('/', async (req, res, next) => {
   try {
     const { status = 'active', limit = 50 } = req.query;
-    const [rows] = await pool.query('SELECT id, name, photo, gender, language, rating, priceperminute, chatstatus, callstatus FROM community WHERE status=? LIMIT ?', [status, Number(limit)]);
+    const [rows] = await pool.query('SELECT id, name, photo, gender, language, rating, priceperminute, chatstatus, callstatus FROM users WHERE role=? AND status=? LIMIT ?', ['vendor', status, Number(limit)]);
     res.json(rows);
   } catch (e) { next(e); }
 });
@@ -15,7 +15,7 @@ router.get('/', async (req, res, next) => {
 // GET /vendors/:id
 router.get('/:id', async (req, res, next) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM community WHERE id=?', [req.params.id]);
+    const [rows] = await pool.query('SELECT * FROM users WHERE id=? AND role=?', [req.params.id, 'vendor']);
     res.json(rows[0] || null);
   } catch (e) { next(e); }
 });

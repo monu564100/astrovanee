@@ -102,4 +102,25 @@ router.post('/end', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+router.post('/decline-call', async (req, res, next) => {
+  try {
+    const { consultationId, userId } = req.body;
+    if (!consultationId) return res.status(400).json({ error: 'consultationId required' });
+    
+    console.log('❌ User declined call for consultation:', consultationId);
+    
+    // Update consultation status to declined
+    const mysqlDateTime = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    await pool.execute(
+      "UPDATE consultation SET consultationstatus='declined', endedon=?, endedby=? WHERE id=?", 
+      [mysqlDateTime, userId || 'user', consultationId]
+    );
+    
+    res.json({ ok: true, message: 'Call declined' });
+  } catch (e) { 
+    console.error('❌ Decline call error:', e);
+    next(e); 
+  }
+});
+
 export default router;
